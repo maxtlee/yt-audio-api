@@ -34,13 +34,19 @@ def handle_audio_request():
     if not video_url:
         return jsonify(error="Missing 'url' parameter in request."), BAD_REQUEST
 
-    filename = f"{uuid4()}.mp3"
-    output_path = Path(ABS_DOWNLOADS_PATH) / filename
+    file_id = uuid4()
+    filename = f"{file_id}.mp3"
+    # outtmpl must not hard-code the extension, otherwise yt-dlp's
+    # FFmpegExtractAudio post-processor produces "<id>.mp3.mp3" and the token
+    # no longer matches the stored file. Using %(ext)s keeps the final file at
+    # exactly "<id>.mp3" while the post-processor handles the conversion.
+    output_template = Path(ABS_DOWNLOADS_PATH) / f"{file_id}.%(ext)s"
 
     # yt-dlp configuration for downloading best audio and converting to mp3
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': str(output_path),
+        'outtmpl': str(output_template),
+        'js_runtimes': {'node': {}},
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -82,7 +88,7 @@ def download_audio():
 
     try:
         filename = access_manager.get_audio_file(token)
-        return send_from_directory(ABS_DOWNLOADS_PATH, filename=filename, as_attachment=True)
+        return send_from_directory(ABS_DOWNLOADS_PATH, filename, as_attachment=True)
     except FileNotFoundError:
         return jsonify(error="Requested file could not be found on the server."), NOT_FOUND
 
